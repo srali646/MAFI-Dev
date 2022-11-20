@@ -10,10 +10,16 @@ import sys
 import ctypes
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-
+import numpy as np
+import datetime as dt
+import csv
+from pathlib import Path
 
 app = customtkinter.CTk()
 
+downloads_path = str(Path.home() / "Downloads")
+#plt.style.use('_mpl-gallery')
+#dataListp = []
 class State:
     def __init__(self, Buttontext, connected, message, console, command, active):
         self.Buttontext = Buttontext
@@ -34,6 +40,9 @@ def on_closing(event=0):
 
 #--------------------------------- Button Initialization -----------------------------------------#
 IPX34text = "IPX3&4"  
+IPX5Text = "IPX5"
+IPX1Text = "IPX1"
+IPX2Text = "IPX2"
 
 def IPX34TestSelected():
     IPX34selected = True
@@ -55,6 +64,12 @@ def IPX5TestSelected():
 
 def change_appearance_mode(new_appearance_mode):
     customtkinter.set_appearance_mode(new_appearance_mode)
+    
+def change_screen_size(new_screen_size):
+    if new_screen_size == 'Fullscreen':
+        app.attributes('-fullscreen', True)
+    else:
+        app.attributes('-fullscreen', False)
 
 def button_event():
     print("Button pressed")
@@ -100,16 +115,24 @@ if connectPort != 'None':
     print(f"Arduino found on {connectPort}")
     state = State("Start Test", True, "Mechanical and Fluid Ingress Test System", "Message Console", nullState, "normal")
     buttonIPX34 = State(IPX34text, None, None, "IPX3&4 test selcected", IPX34TestSelected, "normal")
+    buttonIPX5 = State("IPX5", None, None, "IPX5 test selected", IPX5TestSelected, "normal")
+    buttonIPX1 = State(IPX1Text, None, None, "IPX1 test selected", IPX5TestSelected, "normal")
+    buttonIPX2 = State(IPX2Text, None, None, "IPX2 test selected", IPX5TestSelected, "normal")
     buttonStopState = State("Stop", None, None, None, None, 'normal')
+
 else:
     print("Connection Issue")
     state = State("Connect", False, "Connection to controller cannot be made.\nCheck connection and click connect.", "ERROR: Controller not connected, check USB connection.", restart, "normal")
     buttonIPX34 = State(IPX34text, None, None, "IPX3&4 test selcected", IPX34TestSelected, "disabled")
+    buttonIPX5 = State(IPX5Text, None, None, "IPX5 test selected", IPX5TestSelected, "disabled")
+    buttonIPX1 = State(IPX1Text, None, None, "IPX1 test selected", IPX5TestSelected, "disabled")
+    buttonIPX2 = State(IPX2Text, None, None, "IPX2 test selected", IPX5TestSelected, "disabled")
     buttonStopState = State("Stop", None, None, None, None, 'disabled')
 
 ###################################################################################################
 #================================== arduino commands =============================================#
 ###################################################################################################
+
 def startTest34():
     try:
         global ser, serialData, stop_threads
@@ -119,34 +142,38 @@ def startTest34():
         app.messageConsole.get() 
         app.messageConsole.delete(0, END)
         app.messageConsole.insert(0, "IPX3&4 test is running!") 
-        
-        stop_threads = False
-        x.start() 
+        x.start()
     except:
         restart()
         
 def stopIPX34():
-    global serialData, stop_threads
-    serialData = False
     app.messageCenterData.configure(text='')
     app.buttonStart.configure(state = "normal", text="Restart")
     app.messageConsole.get() 
     app.messageConsole.delete(0, END)
     app.messageConsole.insert(0, "IPX3&4 test stopped")
     app.buttonStop.configure(state = 'normal', fg_color=None, command=stopIPX34)
-    stop_threads = True
-    
+    ser.close()
+
+#with graph
 def readSerialData():
     global serialData
+    f = open(f'{downloads_path}/data.csv', 'a', newline ='')
+    writer = csv.writer(f)
     while serialData:
         global stop_threads
         ser.write(b'B')
         data = ser.readline()
+        timeStamp = dt.datetime.now().strftime('%H:%M:%S.%f')
         if len(data) > 0:
-            sensor = float(data.decode('utf8'))
-            app.messageCenterData.configure(text=sensor)
-            print(sensor)
+            #sensor = float(data.decode('utf8'))
+            app.messageCenterData.configure(text=data)
+            writer.writerow(data)
+            print(data)
+    f.close()    
+    #with open(f'{downloads_path}/data.csv')
       
+
 ###################################################################################################
 #===================================== Initialize ================================================#
 ###################################################################################################
@@ -158,18 +185,17 @@ customtkinter.set_default_color_theme("dark-blue")  # Themes: "blue" (standard),
 # Find the USF logo icon
 dirname = os.path.dirname(__file__)
 os.path.join(dirname, "icons", "USFlogo.ico")
-
-x = threading.Thread(target=readSerialData) 
-
+x = threading.Thread(target=readSerialData)
 #-------------------------------------------------------------------------------------------------#
 #------------------------------------Create Window -----------------------------------------------#
 #-------------------------------------------------------------------------------------------------#
 # Create an WIDTH x HEIGHT window with custome title and USF logo
-WIDTH = 780
+WIDTH = 800
 HEIGHT = 520
 
 app.title("Mechanical and Fluid Ingress Protection Spray Test")
-app.geometry(f"{WIDTH}x{HEIGHT}")
+app.state('zoomed')
+app.minsize(WIDTH, HEIGHT)
 app.protocol("WM_DELETE_WINDOW", on_closing)  # call .on_closing() when app gets closed
 app.iconbitmap(f"{dirname}/icons/USFlogo.ico")
 
@@ -194,9 +220,11 @@ app.frame_right.grid(row=0, column=1, sticky="nswe", padx=10, pady=0)
 
 # Configure a 1x11 grid layout in the left frame
 app.frame_left.grid_rowconfigure(0, minsize=10)   # empty row with minsize as spacing
-app.frame_left.grid_rowconfigure(5, weight=1)  # empty row as spacing
+app.frame_left.grid_rowconfigure(4, minsize=50)   # empty row with minsize as spacing
+app.frame_left.grid_rowconfigure(7, weight=1)  # empty row as spacing
 app.frame_left.grid_rowconfigure(8, minsize=20)    # empty row with minsize as spacing
 app.frame_left.grid_rowconfigure(11, minsize=10)  # empty row with minsize as spacing
+
 
 #-------------------------------------------------------------------------------------------------#
 #------------------------------------ Creating items in frames -----------------------------------#
@@ -218,27 +246,33 @@ app.buttonIPX34.grid(row=2, column=0, pady=10, padx=20)
 
 # Add IPX5 Test button
 app.buttonIPX5 = customtkinter.CTkButton(master=app.frame_left,
-                                        text="IPX5",
-                                        command=button_event)
-app.buttonIPX5.grid(row=3, column=0, pady=10, padx=20)
+                                        text=IPX5Text,
+                                        state = buttonIPX5.active,
+                                        command=buttonIPX5.command)
+app.buttonIPX5.grid(row=3, column=0, pady=5, padx=20)
 
-# Add Appearance Mode button
-app.label_mode = customtkinter.CTkLabel(master=app.frame_left, text="Appearance Mode:")
-app.label_mode.grid(row=9, column=0, pady=0, padx=20, sticky="w")
+# Add IPX1-2 Test button
+app.buttonIPX1 = customtkinter.CTkButton(master=app.frame_left,
+                                        text=IPX1Text,
+                                        state = buttonIPX1.active,
+                                        command=buttonIPX1.command)
+app.buttonIPX1.grid(row=5, column=0, pady=5, padx=20)
 
-app.optionmenu_theme = customtkinter.CTkOptionMenu(master=app.frame_left,
-                                                values=["Light", "Dark", "System"],
-                                                command=change_appearance_mode)
-app.optionmenu_theme.grid(row=10, column=0, pady=10, padx=20, sticky="w")
+app.buttonIPX2 = customtkinter.CTkButton(master=app.frame_left,
+                                        text=IPX2Text,
+                                        state = buttonIPX2.active,
+                                        command=buttonIPX2.command)
+app.buttonIPX2.grid(row=6, column=0, pady=5, padx=20)
 
-# Set default Appearance mode:
-app.optionmenu_theme.set("Dark")
+
+
 
 #-------------------------------------------------------------------------------------------------#
 #-------------------------- Configure the grid within the right frame ----------------------------#
 #-------------------------------------------------------------------------------------------------#
 # configure grid layout (3x7)
 app.frame_right.rowconfigure((0, 1, 2, 3), weight=1)
+app.frame_right.grid_rowconfigure(2, minsize=10)   # empty row with minsize as spacing
 app.frame_right.rowconfigure(7, weight=10)
 app.frame_right.columnconfigure((0, 1), weight=1)
 app.frame_right.columnconfigure(2, weight=0)
@@ -262,11 +296,29 @@ app.messageCenter.grid(column=0, row=0, sticky="nwe", padx=15, pady=15)
 
 app.messageCenterData = customtkinter.CTkLabel(master=app.frame_info,
                                             text='',
-                                            height=80,
+                                            height=300,
                                             corner_radius=6,  # <- custom corner radius
                                             fg_color=("white", "gray38"),  # <- custom tuple-color
                                             justify=tkinter.CENTER)
 app.messageCenterData.grid(column=0, row=1, sticky="nwe", padx=15, pady=4)
+
+# Add Appearance Mode button
+app.label_mode = customtkinter.CTkLabel(master=app.frame_right, text="Appearance Mode:")
+app.label_mode.grid(row=0, column=2, columnspan=1, pady=0, padx=20, sticky="we")
+
+app.optionmenu_theme = customtkinter.CTkOptionMenu(master=app.frame_right,
+                                                values=["Light", "Dark", "System"],
+                                                command=change_appearance_mode)
+app.optionmenu_theme.grid(row=1, column=2, columnspan=1, pady=0, padx=20, sticky="we")
+
+# Set default Appearance mode:
+app.optionmenu_theme.set("Dark")
+
+app.optionmenu_size = customtkinter.CTkOptionMenu(master=app.frame_right,
+                                                values=["Windowed", "Fullscreen"],
+                                                command=change_screen_size)
+app.optionmenu_size.grid(row=2, column=2, columnspan=1, pady=0, padx=20, sticky="we")
+app.optionmenu_size.set("Windowed")
 
 #-------------------------------------------------------------------------------------------------#
 #-------------------------- Creating inputs and message console------ ----------------------------#
@@ -293,6 +345,7 @@ app.buttonStop = customtkinter.CTkButton(master=app.frame_right, text=buttonStop
                                                 state = buttonStopState.active,
                                                 command=button_event)
 app.buttonStop.grid(row=9, column=2, pady=10, padx=20, sticky="n")
+
 
 if __name__ == "__main__":
     app.mainloop()
